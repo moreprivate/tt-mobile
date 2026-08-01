@@ -55,7 +55,6 @@ abstract final class ValidationUtils {
   static final RegExp _firstLevelDomainRegExp = RegExp(firstLevelDomainRegex);
   static final RegExp _domainRegExp = RegExp(domainRawRegex);
   static final RegExp _domainWithAliasRegExp = RegExp(domainWithAliasRawRegex);
-  static final PunycodeCodec _punycodeCodec = const PunycodeCodec();
 
   static String? getErrorString(
     BuildContext context,
@@ -298,7 +297,14 @@ abstract final class ValidationUtils {
       return null;
     }
 
-    final encodedDomain = _punycodeCodec.encode(value);
+    // Encode complete domains label-by-label. PunycodeCodec.encode() operates
+    // on one label and incorrectly treats the dots in a hostname as payload.
+    late final String encodedDomain;
+    try {
+      encodedDomain = domainToAscii(value);
+    } on FormatException {
+      return null;
+    }
 
     final isValidDomain = (acceptAlias ? _domainWithAliasRegExp : _domainRegExp).hasMatch(encodedDomain);
 
