@@ -43,9 +43,10 @@ make ln
 flutter run -d <android-device>
 ```
 
-The build downloads a versioned `tt-client` Android Maven repository and
-verifies its SHA-256 before Gradle starts. No sibling checkout or upstream
-Maven repository is used.
+The build consumes a versioned `tt-client` Android Maven repository under
+`third_party/tt-client-maven`. CI downloads and verifies that archive from the
+`moreprivate/tt-client` release selected by `client_release`; no upstream
+GitHub Maven repository or token is used.
 
 For an emulator:
 

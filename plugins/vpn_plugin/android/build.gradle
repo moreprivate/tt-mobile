@@ -53,5 +53,5 @@ dependencies {
     if (ttClientVersion == null || ttClientVersion.toString().trim().isEmpty()) {
         throw new GradleException("ttClientVersion is required; download the pinned tt-client artifact first")
     }
-    implementation("com.moreprivate.trusttunnel:tt-client-android:${ttClientVersion}")
+    implementation("com.moreprivate.tt_mobile:tt-client-android:${ttClientVersion}")
 }

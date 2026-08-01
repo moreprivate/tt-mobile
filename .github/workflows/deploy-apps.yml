@@ -212,7 +212,7 @@ jobs:
     uses: AdGuardSoftwareLimited/actions/.github/workflows/deploy-to-google-play.yml@master
     with:
       team: flutter
-      package-name: com.adguard.trusttunnel
+      package-name: com.moreprivate.tt_mobile
       track: ${{ needs.params.outputs.play-store-track }}
       rollout-percent: ${{ needs.params.outputs.play-store-rollout }}
       release-name: ${{ needs.meta.outputs.version-title }}
