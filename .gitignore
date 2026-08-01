@@ -45,6 +45,7 @@ app.*.map.json
 
 # Android related
 .gradle/
+third_party/tt-client-maven/
 android/app/.cxx
 android/trusttunnel.keystore
 android/build
@@ -79,4 +80,3 @@ lib/common/localization/generated/
 */Gemfile.lock
 */Podfile.lock
 */.bundle
-

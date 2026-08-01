@@ -1,28 +1,8 @@
-def getGprProp = { String name ->
-    def v = project.findProperty(name)
-    if (v != null) return v.toString()
-
-    // fallback to env
-    def envName = name.replace('.', '_').toUpperCase()   // gpr.key -> GPR_KEY
-    v = System.getenv(envName)
-    if (v != null && !v.toString().trim().isEmpty()) return v.toString()
-
-    return null
-}
-
-
 allprojects {
     repositories {
+        maven { url = uri("$rootDir/../third_party/tt-client-maven") }
         google()
         mavenCentral()
-        maven {
-            url = uri("https://maven.pkg.github.com/TrustTunnel/TrustTunnelClient")
-            credentials {
-                username = ""
-                password = getGprProp("gpr.key")
-            }
-            authentication { basic(BasicAuthentication) }
-        }
     }
 }
 
@@ -30,6 +10,18 @@ rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+
+// Keep Flutter plugins with native code (for example jni) on the same
+// side-by-side NDK as the application and local TrustTunnel adapter.
+subprojects {
+    afterEvaluate { project ->
+        def androidExtension = project.extensions.findByName("android")
+        if (androidExtension != null) {
+            androidExtension.ndkVersion = "29.0.14206865"
+        }
+    }
+}
+
 subprojects {
     project.evaluationDependsOn(":app")
 }

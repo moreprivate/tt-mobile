@@ -64,18 +64,23 @@ android {
         versionName = flutterVersionName
     }
 
-    signingConfigs {
-        release {
-            keyAlias = getSigningProp("signingConfigKeyAlias")
-            keyPassword = getSigningProp("signingConfigKeyPassword")
-            storeFile = rootProject.file(getSigningProp("signingConfigKeyStorePath"))
-            storePassword = getSigningProp("signingConfigKeyStorePassword")
+    def signingStorePath = getSigningProp("signingConfigKeyStorePath")
+    if (signingStorePath != null && !signingStorePath.trim().isEmpty()) {
+        signingConfigs {
+            release {
+                keyAlias = getSigningProp("signingConfigKeyAlias")
+                keyPassword = getSigningProp("signingConfigKeyPassword")
+                storeFile = rootProject.file(signingStorePath)
+                storePassword = getSigningProp("signingConfigKeyStorePassword")
+            }
         }
     }
 
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            if (signingStorePath != null && !signingStorePath.trim().isEmpty()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

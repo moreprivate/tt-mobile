@@ -1,27 +1,15 @@
 group = "com.adguard.trusttunnel.vpn_plugin"
 version = "1.0-SNAPSHOT"
 
-def getGprProp = { String name ->
-    def v = project.findProperty(name)
-    if (v != null) return v.toString()
-
-    // fallback to env
-    def envName = name.replace('.', '_').toUpperCase()   // gpr.key -> GPR_KEY
-    v = System.getenv(envName)
-    if (v != null && !v.toString().trim().isEmpty()) return v.toString()
-
-    return null
-}
-
 buildscript {
-    ext.kotlin_version = "2.2.10"
+    ext.kotlin_version = "2.2.20"
     repositories {
         google()
         mavenCentral()
         gradlePluginPortal()
     }
     dependencies {
-        classpath("com.android.tools.build:gradle:8.9.1")
+        classpath("com.android.tools.build:gradle:8.11.1")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version")
     }
 }
@@ -30,13 +18,6 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        maven {
-            url = uri("https://maven.pkg.github.com/TrustTunnel/TrustTunnelClient")
-            credentials {
-                username = ""
-                password = getGprProp("gpr.key")
-            }
-        }
     }
 }
 
@@ -68,5 +49,9 @@ android {
 dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.mockito:mockito-core:5.0.0")
-    implementation("com.adguard.trusttunnel:trusttunnel-client-android:1.1.5-rc.3")
+    def ttClientVersion = rootProject.findProperty("ttClientVersion")
+    if (ttClientVersion == null || ttClientVersion.toString().trim().isEmpty()) {
+        throw new GradleException("ttClientVersion is required; download the pinned tt-client artifact first")
+    }
+    implementation("com.moreprivate.trusttunnel:tt-client-android:${ttClientVersion}")
 }
