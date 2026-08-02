@@ -9,6 +9,15 @@ import 'package:trusttunnel/widgets/scaffold_wrapper.dart';
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
 
+  // The mobile build injects the exact tt-client AAR release tag.  Keeping
+  // this compile-time value separate from the app package version prevents
+  // the About screen from accidentally reporting the Flutter app version as
+  // the native client version.
+  static const _ttClientVersion = String.fromEnvironment(
+    'TT_CLIENT_VERSION',
+    defaultValue: 'not injected',
+  );
+
   @override
   Widget build(BuildContext context) => ScaffoldWrapper(
     child: Scaffold(
@@ -31,6 +40,6 @@ class AboutScreen extends StatelessWidget {
   Future<String> _getPackageVersion() async {
     final PackageInfo packageInfo = await PackageInfo.fromPlatform();
 
-    return 'V${packageInfo.version}';
+    return 'tt-mobile ${packageInfo.version}\n\ntt-client $_ttClientVersion';
   }
 }

@@ -1,0 +1,297 @@
+name: Build mobile targets
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_runner:
+        description: Runner for the build
+        required: true
+        default: self-hosted
+        type: choice
+        options:
+          - self-hosted
+          - github-hosted
+      client_release:
+        description: Exact tt-client release tag to embed
+        required: true
+        default: ''
+      delete_existing:
+        description: Delete an existing release/tag with the same source version
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-mobile-targets
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validate and build Android
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.build_runner == 'self-hosted' && 'docker-runner' || 'ubuntu-24.04' }}
+    timeout-minutes: 120
+    container:
+      image: adguard/core-libs:2.12
+    defaults:
+      run:
+        shell: bash
+    env:
+      TT_CLIENT_REPOSITORY: moreprivate/tt-client
+    steps:
+      - name: Check out mobile source
+        uses: actions/checkout@v6
+
+      - name: Resolve mobile version
+        id: version
+        run: |
+          set -euo pipefail
+          client_release="${{ inputs.client_release }}"
+          case "${client_release}" in
+            *[!A-Za-z0-9._-]*|'')
+              echo "Invalid client release tag: ${client_release}" >&2
+              exit 1
+              ;;
+          esac
+          mkdir -p third_party/tt-client-maven "${RUNNER_TEMP}/tt-client"
+          archive="tt-client-android-${client_release}.tar.gz"
+          base="https://github.com/${TT_CLIENT_REPOSITORY}/releases/download/${client_release}"
+          curl --fail --silent --show-error --location \
+            "${base}/${archive}" -o "${RUNNER_TEMP}/tt-client/${archive}"
+          curl --fail --silent --show-error --location \
+            "${base}/${archive}.sha256" -o "${RUNNER_TEMP}/tt-client/${archive}.sha256"
+          (
+            cd "${RUNNER_TEMP}/tt-client"
+            sha256sum -c "${archive}.sha256"
+          )
+          tar -xzf "${RUNNER_TEMP}/tt-client/${archive}" -C third_party/tt-client-maven
+          test -s "third_party/tt-client-maven/com/moreprivate/tt_mobile/tt-client-android/${client_release}/tt-client-android-${client_release}.aar"
+          test -s "third_party/tt-client-maven/com/moreprivate/tt_mobile/tt-client-android/${client_release}/tt-client-android-${client_release}.pom"
+          printf 'ttClientVersion=%s\n' "${client_release}" >> android/gradle.properties
+          echo "client_release=${client_release}" >> "$GITHUB_OUTPUT"
+          # Containerized/self-hosted runners may check out files under a
+          # different UID. Explicitly trust this ephemeral checkout before
+          # deriving the reproducible timestamp and commit-based version.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          mobile_stamp="$(git show -s --format=%ct HEAD)"
+          mobile_ts="$(date -u --date="@${mobile_stamp}" +%Y%m%dT%H%M%SZ)"
+          mobile_short_sha="$(git rev-parse --short=12 HEAD)"
+          release_tag="${mobile_ts}-${mobile_short_sha}"
+          # Primary installable artifact: arm64 phones (≈10–20× smaller than fat debug).
+          apk_name="tt-mobile-${release_tag}-arm64-v8a-release.apk"
+          echo "version=${release_tag}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+          echo "apk_name=${apk_name}" >> "$GITHUB_OUTPUT"
+          echo "Mobile release: ${release_tag}"
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install native build tools
+        run: |
+          set -euo pipefail
+          command -v python3
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${SDKMANAGER}" ]]; then
+            for candidate in \
+              "${ANDROID_HOME:-}/cmdline-tools/latest/bin/sdkmanager" \
+              "/usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager" \
+              "/opt/android-sdk/cmdline-tools/latest/bin/sdkmanager"; do
+              if [[ -x "${candidate}" ]]; then
+                SDKMANAGER="${candidate}"
+                break
+              fi
+            done
+          fi
+          if [[ -z "${SDKMANAGER}" ]]; then
+            SDK_ROOT="${RUNNER_TEMP}/android-sdk"
+            mkdir -p "${SDK_ROOT}/cmdline-tools/latest"
+            curl --fail --silent --show-error --location \
+              https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+              -o "${RUNNER_TEMP}/cmdline-tools.zip"
+            unzip -q "${RUNNER_TEMP}/cmdline-tools.zip" -d "${RUNNER_TEMP}/cmdline-tools-unpacked"
+            mv "${RUNNER_TEMP}/cmdline-tools-unpacked/cmdline-tools/"* \
+              "${SDK_ROOT}/cmdline-tools/latest/"
+            SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          test -n "${SDKMANAGER}" && test -x "${SDKMANAGER}"
+          if [[ -z "${SDK_ROOT}" ]]; then
+            SDK_ROOT="$(cd "$(dirname "${SDKMANAGER}")/../.." && pwd)"
+          fi
+          echo "ANDROID_HOME=${SDK_ROOT}" >> "${GITHUB_ENV}"
+          echo "ANDROID_SDK_ROOT=${SDK_ROOT}" >> "${GITHUB_ENV}"
+          echo "SDKMANAGER=${SDKMANAGER}" >> "${GITHUB_ENV}"
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --fail --silent --show-error https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal
+          fi
+          test -f "$HOME/.cargo/env" && . "$HOME/.cargo/env" || true
+          python3 -m venv .venv
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
+          . .venv/bin/activate
+          python -m pip install --upgrade pip conan
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-linux-android armv7-linux-androideabi \
+            x86_64-linux-android i686-linux-android
+          cargo install --locked cargo-ndk
+
+          FLUTTER_HOME="${RUNNER_TEMP}/flutter"
+          if [[ -d "${FLUTTER_HOME}/.git" ]]; then
+            git -C "${FLUTTER_HOME}" fetch --depth 1 origin \
+              refs/tags/3.44.8
+            git -C "${FLUTTER_HOME}" checkout --force FETCH_HEAD
+          else
+            rm -rf "${FLUTTER_HOME}"
+            git clone --depth 1 --branch 3.44.8 \
+              https://github.com/flutter/flutter.git "${FLUTTER_HOME}"
+          fi
+          echo "${FLUTTER_HOME}/bin" >> "${GITHUB_PATH}"
+          "${FLUTTER_HOME}/bin/flutter" config --no-analytics
+
+      - name: Install pinned Android toolchain
+        run: |
+          set -euo pipefail
+          yes | "${SDKMANAGER}" --licenses >/dev/null || true
+          "${SDKMANAGER}" 'platforms;android-36' 'build-tools;35.0.0' \
+            'ndk;29.0.14206865' 'cmake;3.31.6'
+
+      - name: Validate Flutter project
+        run: |
+          set -euo pipefail
+          . .venv/bin/activate
+          make init
+
+          flutter analyze --no-fatal-infos
+          if [[ -d test ]]; then
+            flutter test
+          else
+            echo 'No Flutter test directory; skipping test execution.'
+          fi
+
+      # Same release keystore as local (android/trusttunnel.keystore) so APKs replace on device.
+      - name: Configure release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ANDROID_KEYSTORE_BASE64:-}" || -z "${ANDROID_KEYSTORE_PASSWORD:-}" \
+             || -z "${ANDROID_KEY_ALIAS:-}" || -z "${ANDROID_KEY_PASSWORD:-}" ]]; then
+            echo "Missing Android signing secrets (required for replaceable release APKs):" >&2
+            echo "  ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD" >&2
+            echo "Create once locally: make aux-setup-android-signing" >&2
+            echo "Then: base64 -w0 android/trusttunnel.keystore  →  ANDROID_KEYSTORE_BASE64" >&2
+            exit 1
+          fi
+          ks="${RUNNER_TEMP}/tt-mobile-release.keystore"
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > "${ks}"
+          test -s "${ks}"
+          {
+            echo "ORG_GRADLE_PROJECT_signingConfigKeyStorePath=${ks}"
+            echo "ORG_GRADLE_PROJECT_signingConfigKeyAlias=${ANDROID_KEY_ALIAS}"
+            echo "ORG_GRADLE_PROJECT_signingConfigKeyPassword=${ANDROID_KEY_PASSWORD}"
+            echo "ORG_GRADLE_PROJECT_signingConfigKeyStorePassword=${ANDROID_KEYSTORE_PASSWORD}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Build release APKs (split per ABI)
+        run: |
+          set -euo pipefail
+          # Release + split-per-abi; signed via ORG_GRADLE_PROJECT_signingConfigKey* above.
+          flutter build apk --release --split-per-abi \
+            --build-name="${{ steps.version.outputs.version }}" \
+            --build-number="${{ github.run_number }}" \
+            --dart-define="TT_CLIENT_VERSION=${{ steps.version.outputs.client_release }}" \
+            --no-pub
+          out=build/app/outputs/flutter-apk
+          tag="${{ steps.version.outputs.release_tag }}"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            src="${out}/app-${abi}-release.apk"
+            if [[ -f "${src}" ]]; then
+              cp "${src}" "${out}/tt-mobile-${tag}-${abi}-release.apk"
+            fi
+          done
+          test -s "${out}/${{ steps.version.outputs.apk_name }}"
+          ls -lah "${out}"/tt-mobile-*-release.apk
+
+      - name: Package APK artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: tt-mobile-release-apks
+          path: build/app/outputs/flutter-apk/tt-mobile-*-release.apk
+          if-no-files-found: error
+
+  publish:
+    name: Publish mobile release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Check out workflow source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "${{ github.run_id }}" --repo "$GITHUB_REPOSITORY" --dir release
+
+      - name: Create immutable release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DELETE_EXISTING: ${{ inputs.delete_existing || false }}
+        run: |
+          set -euo pipefail
+          mapfile -t apks < <(find release -type f -name 'tt-mobile-*-release.apk' | sort)
+          ((${#apks[@]})) || { echo 'no mobile release APK found' >&2; exit 1; }
+          # Tag is the shared prefix before the ABI segment:
+          #   tt-mobile-<tag>-arm64-v8a-release.apk
+          primary="$(printf '%s\n' "${apks[@]}" | grep -E 'arm64-v8a-release\.apk$' | head -1 || true)"
+          [ -n "${primary}" ] || primary="${apks[0]}"
+          name="$(basename "${primary}")"
+          tag="${name#tt-mobile-}"
+          tag="${tag%-arm64-v8a-release.apk}"
+          tag="${tag%-armeabi-v7a-release.apk}"
+          tag="${tag%-x86_64-release.apk}"
+          tag="${tag%-release.apk}"
+          case "${tag}" in
+            *[!A-Za-z0-9._-]*|'') echo "Invalid release tag: ${tag}" >&2; exit 1 ;;
+          esac
+          release_exists=0
+          tag_exists=0
+          gh release view "${tag}" >/dev/null 2>&1 && release_exists=1 || true
+          gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1 && tag_exists=1 || true
+          if [[ "${DELETE_EXISTING}" == true ]]; then
+            if (( release_exists )); then
+              gh release delete "${tag}" --yes --cleanup-tag
+              release_exists=0
+              tag_exists=0
+            elif (( tag_exists )); then
+              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}"
+              tag_exists=0
+            fi
+          elif (( release_exists || tag_exists )); then
+            echo "Release/tag already exists: ${tag}; pass delete_existing=true to replace it" >&2
+            exit 1
+          fi
+          assets=()
+          for apk in "${apks[@]}"; do
+            sha256sum "${apk}" > "${apk}.sha256"
+            assets+=("${apk}" "${apk}.sha256")
+          done
+          gh release create "${tag}" \
+            --target "${GITHUB_SHA}" \
+            --title "${tag}" \
+            --notes "Release APKs (split per ABI) from ${GITHUB_SHA}. Prefer arm64-v8a on modern phones." \
+            "${assets[@]}"

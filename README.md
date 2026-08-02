@@ -48,6 +48,53 @@ The build consumes a versioned `tt-client` Android Maven repository under
 `moreprivate/tt-client` release selected by `client_release`; no upstream
 GitHub Maven repository or token is used.
 
+### Release APK (local or CI) — signed, replaceable
+
+Release builds **require** a fixed signing keystore so every APK (laptop Docker
+chain, GitHub cloud, self-hosted runner) can **replace** the previous install.
+
+**One-time local keystore in HOME** (not in the repo; survives deleting the clone):
+
+```bash
+cd tt-mobile
+make aux-setup-android-signing
+# → $HOME/.config/tt-mobile/trusttunnel.keystore
+# → android/local.properties (absolute path + passwords; gitignored)
+# Back up ~/.config/tt-mobile/ and the password offline.
+```
+
+**Same key into GitHub** (repo or org secrets for cloud + self-hosted):
+
+| Secret | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 ~/.config/tt-mobile/trusttunnel.keystore` |
+| `ANDROID_KEYSTORE_PASSWORD` | store password |
+| `ANDROID_KEY_ALIAS` | `trusttunnel` (default from setup) |
+| `ANDROID_KEY_PASSWORD` | key password |
+
+Prefer **release + split per ABI**:
+
+```bash
+# after third_party/tt-client-maven is populated and ttClientVersion is set
+make release-apk
+# → build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+```
+
+From the sibling chain (`tt-manage`):
+
+```bash
+make clean && make build
+# → ../.tt-build/tt-mobile-arm64-v8a-release.apk  (signed)
+```
+
+Without signing config, the release Gradle task **fails** (no silent unsigned/debug-signed APKs).
+
+**Why old APKs were ~200MB:** debug mode (large `libflutter`, Vulkan validation
+layer, uncompressed Dart assets) × three ABIs in one fat APK. Release arm64 is
+roughly **10× smaller**.
+
+Optional fat single APK (all ABIs, ~90MB): `make release-apk-fat`.
+
 For an emulator:
 
 ```bash
@@ -55,6 +102,7 @@ emulator -avd <avd-name> &
 adb wait-for-device
 flutter devices
 flutter run -d emulator-5554
+# or install the x86_64 split: adb install app-x86_64-release.apk
 ```
 
 ## Configure a server
