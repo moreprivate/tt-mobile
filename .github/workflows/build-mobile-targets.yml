@@ -1,0 +1,248 @@
+name: Build mobile targets
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_runner:
+        description: Runner for the build
+        required: true
+        default: self-hosted
+        type: choice
+        options:
+          - self-hosted
+          - github-hosted
+      client_release:
+        description: Exact tt-client release tag to embed
+        required: true
+        default: ''
+      delete_existing:
+        description: Delete an existing release/tag with the same source version
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-mobile-targets
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validate and build Android
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.build_runner == 'self-hosted' && 'docker-runner' || 'ubuntu-24.04' }}
+    timeout-minutes: 120
+    container:
+      image: adguard/core-libs:2.12
+    defaults:
+      run:
+        shell: bash
+    env:
+      TT_CLIENT_REPOSITORY: moreprivate/tt-client
+    steps:
+      - name: Check out mobile source
+        uses: actions/checkout@v6
+
+      - name: Resolve mobile version
+        id: version
+        run: |
+          set -euo pipefail
+          client_release="${{ inputs.client_release }}"
+          case "${client_release}" in
+            *[!A-Za-z0-9._-]*|'')
+              echo "Invalid client release tag: ${client_release}" >&2
+              exit 1
+              ;;
+          esac
+          mkdir -p third_party/tt-client-maven "${RUNNER_TEMP}/tt-client"
+          archive="tt-client-android-${client_release}.tar.gz"
+          base="https://github.com/${TT_CLIENT_REPOSITORY}/releases/download/${client_release}"
+          curl --fail --silent --show-error --location \
+            "${base}/${archive}" -o "${RUNNER_TEMP}/tt-client/${archive}"
+          curl --fail --silent --show-error --location \
+            "${base}/${archive}.sha256" -o "${RUNNER_TEMP}/tt-client/${archive}.sha256"
+          (
+            cd "${RUNNER_TEMP}/tt-client"
+            sha256sum -c "${archive}.sha256"
+          )
+          tar -xzf "${RUNNER_TEMP}/tt-client/${archive}" -C third_party/tt-client-maven
+          test -s "third_party/tt-client-maven/com/moreprivate/tt_mobile/tt-client-android/${client_release}/tt-client-android-${client_release}.aar"
+          test -s "third_party/tt-client-maven/com/moreprivate/tt_mobile/tt-client-android/${client_release}/tt-client-android-${client_release}.pom"
+          printf 'ttClientVersion=%s\n' "${client_release}" >> android/gradle.properties
+          echo "client_release=${client_release}" >> "$GITHUB_OUTPUT"
+          # Containerized/self-hosted runners may check out files under a
+          # different UID. Explicitly trust this ephemeral checkout before
+          # deriving the reproducible timestamp and commit-based version.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          mobile_stamp="$(git show -s --format=%ct HEAD)"
+          mobile_ts="$(date -u --date="@${mobile_stamp}" +%Y%m%dT%H%M%SZ)"
+          mobile_short_sha="$(git rev-parse --short=12 HEAD)"
+          release_tag="${mobile_ts}-${mobile_short_sha}"
+          apk_name="tt-mobile-${release_tag}-debug.apk"
+          echo "version=${release_tag}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+          echo "apk_name=${apk_name}" >> "$GITHUB_OUTPUT"
+          echo "Mobile release: ${release_tag}"
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install native build tools
+        run: |
+          set -euo pipefail
+          command -v python3
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${SDKMANAGER}" ]]; then
+            for candidate in \
+              "${ANDROID_HOME:-}/cmdline-tools/latest/bin/sdkmanager" \
+              "/usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager" \
+              "/opt/android-sdk/cmdline-tools/latest/bin/sdkmanager"; do
+              if [[ -x "${candidate}" ]]; then
+                SDKMANAGER="${candidate}"
+                break
+              fi
+            done
+          fi
+          if [[ -z "${SDKMANAGER}" ]]; then
+            SDK_ROOT="${RUNNER_TEMP}/android-sdk"
+            mkdir -p "${SDK_ROOT}/cmdline-tools/latest"
+            curl --fail --silent --show-error --location \
+              https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+              -o "${RUNNER_TEMP}/cmdline-tools.zip"
+            unzip -q "${RUNNER_TEMP}/cmdline-tools.zip" -d "${RUNNER_TEMP}/cmdline-tools-unpacked"
+            mv "${RUNNER_TEMP}/cmdline-tools-unpacked/cmdline-tools/"* \
+              "${SDK_ROOT}/cmdline-tools/latest/"
+            SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          test -n "${SDKMANAGER}" && test -x "${SDKMANAGER}"
+          if [[ -z "${SDK_ROOT}" ]]; then
+            SDK_ROOT="$(cd "$(dirname "${SDKMANAGER}")/../.." && pwd)"
+          fi
+          echo "ANDROID_HOME=${SDK_ROOT}" >> "${GITHUB_ENV}"
+          echo "ANDROID_SDK_ROOT=${SDK_ROOT}" >> "${GITHUB_ENV}"
+          echo "SDKMANAGER=${SDKMANAGER}" >> "${GITHUB_ENV}"
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --fail --silent --show-error https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal
+          fi
+          test -f "$HOME/.cargo/env" && . "$HOME/.cargo/env" || true
+          python3 -m venv .venv
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
+          . .venv/bin/activate
+          python -m pip install --upgrade pip conan
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-linux-android armv7-linux-androideabi \
+            x86_64-linux-android i686-linux-android
+          cargo install --locked cargo-ndk
+
+          FLUTTER_HOME="${RUNNER_TEMP}/flutter"
+          if [[ -d "${FLUTTER_HOME}/.git" ]]; then
+            git -C "${FLUTTER_HOME}" fetch --depth 1 origin \
+              refs/tags/3.44.8
+            git -C "${FLUTTER_HOME}" checkout --force FETCH_HEAD
+          else
+            rm -rf "${FLUTTER_HOME}"
+            git clone --depth 1 --branch 3.44.8 \
+              https://github.com/flutter/flutter.git "${FLUTTER_HOME}"
+          fi
+          echo "${FLUTTER_HOME}/bin" >> "${GITHUB_PATH}"
+          "${FLUTTER_HOME}/bin/flutter" config --no-analytics
+
+      - name: Install pinned Android toolchain
+        run: |
+          set -euo pipefail
+          yes | "${SDKMANAGER}" --licenses >/dev/null || true
+          "${SDKMANAGER}" 'platforms;android-36' 'build-tools;35.0.0' \
+            'ndk;29.0.14206865' 'cmake;3.31.6'
+
+      - name: Validate Flutter project
+        run: |
+          set -euo pipefail
+          . .venv/bin/activate
+          make init
+
+          flutter analyze --no-fatal-infos
+          if [[ -d test ]]; then
+            flutter test
+          else
+            echo 'No Flutter test directory; skipping test execution.'
+          fi
+
+      - name: Build debug APK
+        run: |
+          set -euo pipefail
+          flutter build apk --debug \
+            --build-name="${{ steps.version.outputs.version }}" \
+            --build-number="${{ github.run_number }}" \
+            --no-pub
+          cp build/app/outputs/flutter-apk/app-debug.apk \
+            "build/app/outputs/flutter-apk/${{ steps.version.outputs.apk_name }}"
+
+      - name: Package APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tt-mobile-debug-apk
+          path: build/app/outputs/flutter-apk/${{ steps.version.outputs.apk_name }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish mobile release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Check out workflow source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "${{ github.run_id }}" --repo "$GITHUB_REPOSITORY" --dir release
+
+      - name: Create immutable release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DELETE_EXISTING: ${{ inputs.delete_existing || false }}
+        run: |
+          set -euo pipefail
+          apk="$(find release -type f -name 'tt-mobile-*-debug.apk' -print -quit)"
+          [ -n "${apk}" ] || { echo 'no mobile APK found' >&2; exit 1; }
+          name="$(basename "${apk}")"
+          tag="${name#tt-mobile-}"
+          tag="${tag%-debug.apk}"
+          case "${tag}" in
+            *[!A-Za-z0-9._-]*|'') echo "Invalid release tag: ${tag}" >&2; exit 1 ;;
+          esac
+          release_exists=0
+          tag_exists=0
+          gh release view "${tag}" >/dev/null 2>&1 && release_exists=1 || true
+          gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1 && tag_exists=1 || true
+          if [[ "${DELETE_EXISTING}" == true ]]; then
+            if (( release_exists )); then
+              gh release delete "${tag}" --yes --cleanup-tag
+              release_exists=0
+              tag_exists=0
+            elif (( tag_exists )); then
+              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}"
+              tag_exists=0
+            fi
+          elif (( release_exists || tag_exists )); then
+            echo "Release/tag already exists: ${tag}; pass delete_existing=true to replace it" >&2
+            exit 1
+          fi
+          sha256sum "${apk}" > "${apk}.sha256"
+          gh release create "${tag}" \
+            --target "${GITHUB_SHA}" \
+            --title "${tag}" \
+            --notes "Debug APK built by mobile workflow from ${GITHUB_SHA}." \
+            "${apk}" "${apk}.sha256"
