@@ -1,4 +1,5 @@
-.PHONY: gen ln init release-android aux-setup-android-signing \
+.PHONY: gen ln init release-android release-apk release-apk-fat \
+        aux-setup-android-signing \
         ci-lint-dart ci-test-flutter \
         ci-build-android-apk ci-build-android-aab \
         ci-setup-ruby ci-setup-gpr \
@@ -8,7 +9,7 @@
 
 gen:
 	@echo "* Starting code generation... *"
-	@dart run build_runner build --delete-conflicting-outputs
+	@dart run build_runner build
 	@$(MAKE) -C plugins/vpn_plugin gen
 	@echo "* Code generation successful *"
 
@@ -22,7 +23,7 @@ init:
 	@echo "* Getting latest dependencies *"
 	@flutter pub get
 	@echo "* Running build runner *"
-	@dart run build_runner build --delete-conflicting-outputs
+	@dart run build_runner build
 	@dart pub run intl_utils:generate
 	@$(MAKE) -C plugins/vpn_plugin init
 
@@ -49,41 +50,79 @@ lib/common/localization/generated/l10n.dart: .dart_tool/package_config.json lib/
 
 .dart_tool/build/entrypoint/build.dart: lib/common/localization/generated/l10n.dart
 	@echo "* Starting code generation... *"
-	@dart run build_runner build --delete-conflicting-outputs
+	@dart run build_runner build
 	@$(MAKE) -C plugins/vpn_plugin gen
 	@echo "* Code generation successful *"
 
+# Keystore lives in HOME (not the repo): ~/.config/tt-mobile/
+# Survives git clone/delete; never committed. Back it up yourself.
+TT_MOBILE_SIGN_DIR ?= $(HOME)/.config/tt-mobile
+TT_MOBILE_KEYSTORE ?= $(TT_MOBILE_SIGN_DIR)/trusttunnel.keystore
+
+# Interactive; must use bash (dash has no `read -s`). Requires a real password.
 aux-setup-android-signing:
-	@echo "Enter password for Android keystore (will be used for keystore AND written to android/local.properties):"
-	@read -s PASSWORD; echo ""; \
-	echo "* Generating android/trusttunnel.keystore (alias: trusttunnel) *"; \
-	mkdir -p android; \
-	rm -f android/trusttunnel.keystore; \
-	keytool -genkeypair -v \
-		-keystore android/trusttunnel.keystore \
-		-alias trusttunnel \
-		-keyalg RSA \
-		-keysize 2048 \
-		-validity 10500 \
-		-sigalg SHA256withRSA \
-		-storepass $$PASSWORD \
-		-keypass $$PASSWORD; \
-	echo "* Updating android/local.properties (preserve other keys; replace signingConfigKey* only) *"; \
-	touch android/local.properties; \
-	grep -vE '^[[:space:]]*signingConfigKey(Alias|Password|StorePath|StorePassword)[[:space:]]*=' android/local.properties > android/local.properties.tmp || true; \
-	mv android/local.properties.tmp android/local.properties; \
-	printf "%s\n" \
-		"signingConfigKeyAlias=trusttunnel" \
-		"signingConfigKeyPassword=$$PASSWORD" \
-		"signingConfigKeyStorePath=./trusttunnel.keystore" \
-		"signingConfigKeyStorePassword=$$PASSWORD" \
-		>> android/local.properties; \
-	echo "* Android signing setup done. *"
+	@bash -euo pipefail -c '\
+	  echo "Enter password for Android keystore (store + key)."; \
+	  echo "Written only under $$HOME and android/local.properties (not git)."; \
+	  read -r -s -p "Password: " PASSWORD; echo; \
+	  if [ -z "$$PASSWORD" ]; then echo "ERROR: password must not be empty." >&2; exit 1; fi; \
+	  read -r -s -p "Confirm:  " PASSWORD2; echo; \
+	  if [ "$$PASSWORD" != "$$PASSWORD2" ]; then echo "ERROR: passwords do not match." >&2; exit 1; fi; \
+	  mkdir -p "$(TT_MOBILE_SIGN_DIR)"; \
+	  echo "* Generating $(TT_MOBILE_KEYSTORE) (alias: trusttunnel) *"; \
+	  rm -f "$(TT_MOBILE_KEYSTORE)"; \
+	  keytool -genkeypair -v \
+	    -keystore "$(TT_MOBILE_KEYSTORE)" \
+	    -alias trusttunnel \
+	    -keyalg RSA \
+	    -keysize 2048 \
+	    -validity 10500 \
+	    -sigalg SHA256withRSA \
+	    -storepass "$$PASSWORD" \
+	    -keypass "$$PASSWORD" \
+	    -dname "CN=tt-mobile, OU=moreprivate, O=moreprivate, L=Unknown, ST=Unknown, C=US"; \
+	  chmod 600 "$(TT_MOBILE_KEYSTORE)"; \
+	  echo "* Updating android/local.properties *"; \
+	  mkdir -p android; \
+	  touch android/local.properties; \
+	  grep -vE "^[[:space:]]*signingConfigKey(Alias|Password|StorePath|StorePassword)[[:space:]]*=" android/local.properties \
+	    > android/local.properties.tmp || true; \
+	  mv android/local.properties.tmp android/local.properties; \
+	  printf "%s\n" \
+	    "signingConfigKeyAlias=trusttunnel" \
+	    "signingConfigKeyPassword=$$PASSWORD" \
+	    "signingConfigKeyStorePath=$(TT_MOBILE_KEYSTORE)" \
+	    "signingConfigKeyStorePassword=$$PASSWORD" \
+	    >> android/local.properties; \
+	  chmod 600 android/local.properties; \
+	  echo "* Done. Keystore: $(TT_MOBILE_KEYSTORE)"; \
+	  echo "* Back this file + password up offline. Not in git."; \
+	  echo "* CI: base64 -w0 $(TT_MOBILE_KEYSTORE) → secret ANDROID_KEYSTORE_BASE64" \
+	'
 
 release-android:
 	@echo "* Building Android release (AAB) *"
 	@flutter build appbundle --release
 	@echo "* Android release build done *"
+
+# Preferred installable APKs: one file per ABI (phones → arm64-v8a, ~15–25MB).
+# Fat single-APK (~90MB) is only for convenience / mixed fleets: make release-apk-fat
+release-apk: .dart_tool/build/entrypoint/build.dart
+	@echo "* Building Android release APKs (split per ABI) *"
+	@flutter build apk --release --split-per-abi \
+		$(if $(PROJECT_VERSION),--build-name=$(PROJECT_VERSION),) \
+		$(if $(BUILD_NUMBER),--build-number=$(BUILD_NUMBER),) \
+		$(if $(TT_CLIENT_VERSION),--dart-define=TT_CLIENT_VERSION=$(TT_CLIENT_VERSION),)
+	@ls -lah build/app/outputs/flutter-apk/app-*-release.apk
+	@echo "* Prefer: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk *"
+
+release-apk-fat: .dart_tool/build/entrypoint/build.dart
+	@echo "* Building fat Android release APK (all ABIs, larger) *"
+	@flutter build apk --release \
+		$(if $(PROJECT_VERSION),--build-name=$(PROJECT_VERSION),) \
+		$(if $(BUILD_NUMBER),--build-number=$(BUILD_NUMBER),) \
+		$(if $(TT_CLIENT_VERSION),--dart-define=TT_CLIENT_VERSION=$(TT_CLIENT_VERSION),)
+	@ls -lah build/app/outputs/flutter-apk/app-release.apk
 
 ci-lint-dart:
 	@echo "* Running flutter analyze *"
@@ -118,10 +157,11 @@ ci-build-android-apk: .dart_tool/build/entrypoint/build.dart
 	@if [ -z "$$BUILD_NUMBER" ]; then \
 		echo "ERROR: BUILD_NUMBER env var is not set"; exit 1; \
 	fi
-	@echo "* Building Android APK (release) *"
-	@flutter build apk --release \
+	@echo "* Building Android APK (release, split per ABI) *"
+	@flutter build apk --release --split-per-abi \
 		--build-name=$$PROJECT_VERSION \
 		--build-number=$$BUILD_NUMBER
+	@ls -lah build/app/outputs/flutter-apk/app-*-release.apk
 	@echo "* Android APK build done *"
 
 ci-build-android-aab: .dart_tool/build/entrypoint/build.dart

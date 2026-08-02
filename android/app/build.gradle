@@ -62,25 +62,53 @@ android {
         targetSdk = 36
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName
+        // Optional: -PttAbiFilters=arm64-v8a (comma-separated). Unset keeps
+        // Flutter --split-per-abi and emulator x86_64 working.
+        def abiFiltersProp = project.findProperty("ttAbiFilters")
+        if (abiFiltersProp != null && !abiFiltersProp.toString().trim().isEmpty()) {
+            ndk {
+                abiFilters abiFiltersProp.toString().split(",").collect { it.trim() }.findAll { it }
+            }
+        }
     }
 
+    // Release APKs must be signed with a fixed keystore so local and CI builds
+    // replace each other on device. Set via android/local.properties or
+    // ORG_GRADLE_PROJECT_signingConfigKey* (CI).
     def signingStorePath = getSigningProp("signingConfigKeyStorePath")
-    if (signingStorePath != null && !signingStorePath.trim().isEmpty()) {
+    def signingAlias = getSigningProp("signingConfigKeyAlias")
+    def signingKeyPassword = getSigningProp("signingConfigKeyPassword")
+    def signingStorePassword = getSigningProp("signingConfigKeyStorePassword")
+    def hasReleaseSigning = signingStorePath != null && !signingStorePath.trim().isEmpty() \
+        && signingAlias != null && !signingAlias.trim().isEmpty() \
+        && signingKeyPassword != null && !signingKeyPassword.trim().isEmpty() \
+        && signingStorePassword != null && !signingStorePassword.trim().isEmpty()
+
+    if (hasReleaseSigning) {
         signingConfigs {
             release {
-                keyAlias = getSigningProp("signingConfigKeyAlias")
-                keyPassword = getSigningProp("signingConfigKeyPassword")
+                keyAlias = signingAlias
+                keyPassword = signingKeyPassword
                 storeFile = rootProject.file(signingStorePath)
-                storePassword = getSigningProp("signingConfigKeyStorePassword")
+                storePassword = signingStorePassword
             }
         }
     }
 
     buildTypes {
         release {
-            if (signingStorePath != null && !signingStorePath.trim().isEmpty()) {
-                signingConfig signingConfigs.release
+            if (!hasReleaseSigning) {
+                throw new GradleException(
+                    "Release signing is required for replaceable APKs.\n" +
+                    "Local:  cd tt-mobile && make aux-setup-android-signing\n" +
+                    "        (keystore in \$HOME/.config/tt-mobile/, not the repo)\n" +
+                    "CI:     secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,\n" +
+                    "        ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD\n" +
+                    "Or ORG_GRADLE_PROJECT_signingConfigKeyStorePath/Alias/Password/StorePassword."
+                )
             }
+            signingConfig signingConfigs.release
+            // Prefer: flutter build apk --release --split-per-abi (or AAB).
         }
     }
 }
