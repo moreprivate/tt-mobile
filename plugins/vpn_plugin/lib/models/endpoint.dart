@@ -123,7 +123,7 @@ final class Endpoint {
   final String customSni;
 
   /// Parallel upstream sessions for HTTP/2 or HTTP/3 (`1`–`8`).
-  /// `0` means library default. Config key: `http_connections_num`.
+  /// `0` means library default (8 sessions). Config key: `http_connections_num`.
   final int httpConnectionsNum;
 
   /// {@macro endpoint}
