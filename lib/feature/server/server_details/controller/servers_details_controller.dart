@@ -152,6 +152,8 @@ final class ServerDetailsController extends BaseStateController<ServerDetailsSta
     List<String>? dnsServers,
     ValueData<String>? clientRandom,
     ValueData<String>? customSni,
+    int? httpConnectionsNum,
+    bool? antiDpi,
   }) => handle(
     () {
       setState(
@@ -171,6 +173,8 @@ final class ServerDetailsController extends BaseStateController<ServerDetailsSta
             ipv6: enableIpv6 ?? state.data.ipv6,
             tlsPrefix: clientRandom == null ? null : ValueData(clientRandom.value?.trim()),
             customSni: customSni == null ? null : ValueData(customSni.value?.trim()),
+            httpConnectionsNum: httpConnectionsNum ?? state.data.httpConnectionsNum,
+            antiDpi: antiDpi ?? state.data.antiDpi,
           ),
         ),
       );

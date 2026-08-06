@@ -4,6 +4,7 @@ import 'package:trusttunnel/common/utils/routing_profile_utils.dart';
 import 'package:trusttunnel/data/database/migrations/migrations_v2.dart';
 import 'package:trusttunnel/data/database/migrations/migrations_v3.dart';
 import 'package:trusttunnel/data/database/migrations/migrations_v4.dart';
+import 'package:trusttunnel/data/database/migrations/migrations_v5.dart';
 
 import 'connection.dart' as impl;
 
@@ -27,12 +28,15 @@ class AppDatabase extends _$AppDatabase {
 
   AppDatabase.inMemory(super.e);
 
+  /// Bump when [servers_table.drift] (or other tables) gain columns; add one
+  /// migration step in [onUpgrade] that `addColumn`s them.
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
+      // Fresh install: full current schema from .drift files.
       await _runMigrationStep('create_all', () => m.createAll());
       if (await routingModes.count().getSingle() == 0) {
         await into(routingModes).insert(
@@ -131,6 +135,9 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 4) {
         await _runMigrationStep('v4', () => const MigrationsV4().migrate(this, m));
+      }
+      if (from < 5) {
+        await _runMigrationStep('v5', () => const MigrationsV5().migrate(this, m));
       }
     },
   );

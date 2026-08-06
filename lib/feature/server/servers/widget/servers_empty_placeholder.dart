@@ -12,21 +12,56 @@ class ServersEmptyPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DefaultPage(
     title: context.ln.serversEmptyTitle,
-    descriptionText: context.ln.serversEmptyDescription,
+    descriptionText: context.ln.importConfigDescription,
     imagePath: AssetImages.server,
     imageSize: const Size.square(248),
-    buttonText: context.ln.create,
-    onButtonPressed: () => _pushServerDetailsScreen(context),
     alignment: Alignment.center,
+    button: Padding(
+      padding: EdgeInsets.only(left: 16, right: 16, bottom: context.isMobileBreakpoint ? 16 : 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FilledButton(
+            style: context.theme.filledButtonTheme.style?.copyWith(
+              minimumSize: WidgetStateProperty.all(
+                const Size(double.infinity, 40),
+              ),
+            ),
+            onPressed: () => _importConfig(context),
+            child: Text(context.ln.importConfig),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: () => _pushServerDetailsScreen(context),
+            child: Text(context.ln.create),
+          ),
+        ],
+      ),
+    ),
   );
 
-  void _pushServerDetailsScreen(BuildContext context) async {
+  Future<void> _importConfig(BuildContext context) async {
     final controller = ServersScope.controllerOf(context, listen: false);
+    try {
+      final data = await controller.importConfigFile();
+      if (data == null || !context.mounted) {
+        return;
+      }
+      await context.push(
+        ServerDetailsPopUp.preloaded(preloadedData: data),
+      );
+      controller.fetchServers();
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      context.showInfoSnackBar(message: context.ln.importConfigFailed);
+    }
+  }
 
-    await context.push(
-      const ServerDetailsPopUp(),
-    );
-
+  Future<void> _pushServerDetailsScreen(BuildContext context) async {
+    final controller = ServersScope.controllerOf(context, listen: false);
+    await context.push(const ServerDetailsPopUp());
     controller.fetchServers();
   }
 }

@@ -20,6 +20,8 @@ typedef DataChangedCallback =
       List<String>? dnsServers,
       ValueData<String>? clientRandom,
       ValueData<String>? customSni,
+      int? httpConnectionsNum,
+      bool? antiDpi,
     });
 
 abstract class ServerDetailsScopeController {

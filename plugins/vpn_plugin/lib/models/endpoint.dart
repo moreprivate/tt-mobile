@@ -122,6 +122,10 @@ final class Endpoint {
 
   final String customSni;
 
+  /// Parallel upstream sessions for HTTP/2 or HTTP/3 (`1`–`8`).
+  /// `0` means library default. Config key: `http_connections_num`.
+  final int httpConnectionsNum;
+
   /// {@macro endpoint}
   ///
   /// Defaults are intentionally permissive:
@@ -129,6 +133,7 @@ final class Endpoint {
   /// - [clientRandom] and [certificate] default to empty strings.
   /// - [skipVerification] and [antiDpi] default to `false`.
   /// - [upStreamFallbackProtocol] defaults to `null` (no explicit fallback).
+  /// - [httpConnectionsNum] defaults to `0` (library default).
   const Endpoint({
     this.addresses = const [],
     this.dnsUpStreams = const [],
@@ -139,6 +144,7 @@ final class Endpoint {
     this.upStreamFallbackProtocol,
     this.antiDpi = false,
     this.skipVerification = false,
+    this.httpConnectionsNum = 0,
     required this.name,
     required this.hostName,
     required this.username,
@@ -149,7 +155,7 @@ final class Endpoint {
 
   @override
   String toString() =>
-      'Endpoint(name: $name, addresses: $addresses, dnsUpStreams: $dnsUpStreams, exclusions: $exclusions, hostName: $hostName, username: $username, password: $password, clientRandom: $clientRandom, certificate: $certificate, upStreamProtocol: $upStreamProtocol, upStreamFallbackProtocol: $upStreamFallbackProtocol, antiDpi: $antiDpi, hasIpv6: $hasIpv6, skipVerification: $skipVerification)';
+      'Endpoint(name: $name, addresses: $addresses, dnsUpStreams: $dnsUpStreams, exclusions: $exclusions, hostName: $hostName, username: $username, password: $password, clientRandom: $clientRandom, certificate: $certificate, upStreamProtocol: $upStreamProtocol, upStreamFallbackProtocol: $upStreamFallbackProtocol, antiDpi: $antiDpi, hasIpv6: $hasIpv6, skipVerification: $skipVerification, httpConnectionsNum: $httpConnectionsNum)';
 
   @override
   bool operator ==(covariant Endpoint other) {
@@ -168,7 +174,8 @@ final class Endpoint {
         other.upStreamFallbackProtocol == upStreamFallbackProtocol &&
         other.antiDpi == antiDpi &&
         other.hasIpv6 == hasIpv6 &&
-        other.skipVerification == skipVerification;
+        other.skipVerification == skipVerification &&
+        other.httpConnectionsNum == httpConnectionsNum;
   }
 
   @override
@@ -187,5 +194,6 @@ final class Endpoint {
     antiDpi,
     hasIpv6,
     skipVerification,
+    httpConnectionsNum,
   ]);
 }

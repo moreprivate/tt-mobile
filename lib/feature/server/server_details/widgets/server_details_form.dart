@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:trusttunnel/common/assets/asset_icons.dart';
 import 'package:trusttunnel/common/error/model/enum/presentation_field_name.dart';
 import 'package:trusttunnel/common/error/model/presentation_field.dart';
@@ -193,6 +194,22 @@ class _ServerDetailsFormState extends State<ServerDetailsForm> {
                   protocol: protocol,
                 ),
               ),
+              CustomTextField(
+                value: '${_formData.httpConnectionsNum}',
+                label: context.ln.httpConnectionsNumLabel,
+                hint: context.ln.httpConnectionsNumHint,
+                helper: context.ln.httpConnectionsNumHelper,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                onChanged: (raw) {
+                  final parsed = int.tryParse(raw.trim());
+                  if (parsed == null) return;
+                  _onDataChanged(
+                    context,
+                    httpConnectionsNum: parsed.clamp(0, 8),
+                  );
+                },
+              ),
               CustomDropdownMenu<RoutingProfile>.expanded(
                 value: _pickedRoutingProfile,
                 values: _routingProfiles,
@@ -280,6 +297,16 @@ class _ServerDetailsFormState extends State<ServerDetailsForm> {
               enableIpv6: value,
             ),
           ),
+          CheckboxListTile(
+            value: _formData.antiDpi,
+            title: Text(context.ln.antiDpiLabel),
+            subtitle: Text(context.ln.antiDpiHelper),
+            contentPadding: const EdgeInsets.all(4),
+            onChanged: (value) => _onDataChanged(
+              context,
+              antiDpi: value,
+            ),
+          ),
         ],
       ),
     );
@@ -310,6 +337,8 @@ class _ServerDetailsFormState extends State<ServerDetailsForm> {
     String? routingProfileId,
     List<String>? dnsServers,
     ValueData<String>? customSni,
+    int? httpConnectionsNum,
+    bool? antiDpi,
   }) =>
       ServerDetailsScope.controllerOf(
         context,
@@ -326,6 +355,8 @@ class _ServerDetailsFormState extends State<ServerDetailsForm> {
         routingProfileId: routingProfileId,
         dnsServers: dnsServers,
         customSni: customSni,
+        httpConnectionsNum: httpConnectionsNum,
+        antiDpi: antiDpi,
       );
 
   @override

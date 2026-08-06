@@ -2,6 +2,7 @@ import 'package:trusttunnel/common/controller/concurrency/sequential_controller_
 import 'package:trusttunnel/common/controller/controller/state_controller.dart';
 import 'package:trusttunnel/common/error/exception_utils.dart';
 import 'package:trusttunnel/common/error/model/presentation_exception.dart';
+import 'package:trusttunnel/data/model/server_data.dart';
 import 'package:trusttunnel/data/repository/server_repository.dart';
 import 'package:trusttunnel/feature/server/servers/controller/servers_states.dart';
 
@@ -16,6 +17,10 @@ final class ServersController extends BaseStateController<ServersState> with Seq
     required ServerRepository repository,
     super.initialState = const ServersState.initial(),
   }) : _repository = repository;
+
+  /// Opens the file picker and imports a server-generated client config.
+  /// Returns `null` if cancelled. Throws on parse/read failure.
+  Future<ServerData?> importConfigFile() => _repository.pickAndImportConfigFile();
 
   /// Make a purchase for the given product ID
   void fetchServers() {

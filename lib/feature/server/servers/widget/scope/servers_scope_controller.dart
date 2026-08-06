@@ -1,5 +1,6 @@
 import 'package:trusttunnel/common/error/model/presentation_exception.dart';
 import 'package:trusttunnel/data/model/server.dart';
+import 'package:trusttunnel/data/model/server_data.dart';
 
 abstract class ServersScopeController {
   abstract final List<Server> servers;
@@ -9,4 +10,5 @@ abstract class ServersScopeController {
 
   abstract final void Function() fetchServers;
   abstract final void Function(String? serverId) pickServer;
+  abstract final Future<ServerData?> Function() importConfigFile;
 }
