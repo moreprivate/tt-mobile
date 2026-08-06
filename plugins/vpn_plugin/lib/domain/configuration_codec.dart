@@ -102,6 +102,9 @@ abstract final class ConfigurationCodecKeys {
   /// Endpoint anti-DPI toggle key.
   static const antiDpi = 'anti_dpi';
 
+  /// Parallel H2/H3 sessions key.
+  static const httpConnectionsNum = 'http_connections_num';
+
   // Tun keys
   /// TUN included routes list key.
   static const includedRoutes = 'included_routes';
@@ -187,6 +190,9 @@ final class ConfigurationEncoder extends Converter<Configuration, String> {
       config.endpoint.upStreamFallbackProtocol?.value ?? '',
     );
     endpoint.setBool(ConfigurationCodecKeys.antiDpi, config.endpoint.antiDpi);
+    if (config.endpoint.httpConnectionsNum > 0) {
+      endpoint.setInt(ConfigurationCodecKeys.httpConnectionsNum, config.endpoint.httpConnectionsNum);
+    }
     endpoint.setStringList(ConfigurationCodecKeys.dnsUpStreams, config.endpoint.dnsUpStreams);
     endpoint.setString(ConfigurationCodecKeys.name, _escapeCharsEncoder.convert(config.endpoint.name));
 
@@ -275,6 +281,7 @@ final class ConfigurationDecoder extends Converter<String, Configuration> {
     final String upstreamFallbackProtocolStr =
         endpoint.getString(ConfigurationCodecKeys.upstreamFallbackProtocol) ?? '';
     final bool antiDpi = endpoint.getBool(ConfigurationCodecKeys.antiDpi) ?? false;
+    final int httpConnectionsNum = endpoint.getInt(ConfigurationCodecKeys.httpConnectionsNum) ?? 0;
 
     final List<String> includedRoutes =
         tun.getStringList(ConfigurationCodecKeys.includedRoutes) ?? IniConst.defaultTunRoutes;
@@ -324,6 +331,7 @@ final class ConfigurationDecoder extends Converter<String, Configuration> {
         skipVerification: skipVerification,
         certificate: certificate,
         antiDpi: antiDpi,
+        httpConnectionsNum: httpConnectionsNum,
       ),
       tun: Tun(
         includedRoutes: includedRoutes,

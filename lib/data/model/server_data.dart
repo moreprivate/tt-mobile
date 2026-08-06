@@ -52,6 +52,18 @@ class ServerData {
 
   final String? customSni;
 
+  /// Parallel H2/H3 sessions (`0` = library default, or `1`–`8`). Default [defaultHttpConnectionsNum].
+  final int httpConnectionsNum;
+
+  /// TLS anti-DPI pacing (config `anti_dpi`). Default false for throughput.
+  final bool antiDpi;
+
+  /// Product default: `0` lets the native client apply its library default.
+  static const int defaultHttpConnectionsNum = 0;
+
+  /// Default DNS when config list is empty (Cloudflare).
+  static const List<String> defaultDnsServers = ['1.1.1.1', '1.0.0.1'];
+
   /// {@macro server}
   const ServerData({
     required this.name,
@@ -66,6 +78,8 @@ class ServerData {
     this.certificate,
     this.tlsPrefix,
     this.customSni,
+    this.httpConnectionsNum = defaultHttpConnectionsNum,
+    this.antiDpi = false,
     this.selected = false,
   });
 
@@ -76,12 +90,14 @@ class ServerData {
     this.username = '',
     this.password = '',
     this.vpnProtocol = VpnProtocol.http2,
-    this.dnsServers = const [],
+    this.dnsServers = defaultDnsServers,
     this.routingProfileId = '',
     this.ipv6 = true,
     this.certificate,
     this.tlsPrefix,
     this.customSni,
+    this.httpConnectionsNum = defaultHttpConnectionsNum,
+    this.antiDpi = false,
     this.selected = false,
   });
 
@@ -100,6 +116,8 @@ class ServerData {
     ipv6,
     tlsPrefix,
     customSni,
+    httpConnectionsNum,
+    antiDpi,
   );
 
   @override
@@ -117,6 +135,8 @@ class ServerData {
       'ipv6: $ipv6,'
       'tlsPrefix: $tlsPrefix,'
       'certificate: $certificate,'
+      'httpConnectionsNum: $httpConnectionsNum,'
+      'antiDpi: $antiDpi,'
       ')';
 
   @override
@@ -136,7 +156,9 @@ class ServerData {
         other.ipv6 == ipv6 &&
         other.tlsPrefix == tlsPrefix &&
         other.certificate == certificate &&
-        other.customSni == customSni;
+        other.customSni == customSni &&
+        other.httpConnectionsNum == httpConnectionsNum &&
+        other.antiDpi == antiDpi;
   }
 
   /// Creates a copy of this server with the given fields replaced.
@@ -156,6 +178,8 @@ class ServerData {
     ValueData<Certificate>? certificate,
     ValueData<String>? tlsPrefix,
     ValueData<String>? customSni,
+    int? httpConnectionsNum,
+    bool? antiDpi,
   }) => ServerData(
     name: name ?? this.name,
     ipAddress: ipAddress ?? this.ipAddress,
@@ -170,5 +194,7 @@ class ServerData {
     certificate: certificate != null ? certificate.value : this.certificate,
     tlsPrefix: tlsPrefix != null ? tlsPrefix.value : this.tlsPrefix,
     customSni: customSni != null ? customSni.value : this.customSni,
+    httpConnectionsNum: httpConnectionsNum ?? this.httpConnectionsNum,
+    antiDpi: antiDpi ?? this.antiDpi,
   );
 }

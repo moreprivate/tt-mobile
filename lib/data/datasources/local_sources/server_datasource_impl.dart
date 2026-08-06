@@ -49,6 +49,8 @@ class ServerDataSourceImpl implements ServerDataSource {
           request.routingProfileId,
         ),
         customSni: Value(request.customSni),
+        httpConnectionsNum: Value(request.httpConnectionsNum),
+        antiDpi: Value(request.antiDpi),
       ),
     );
 
@@ -82,6 +84,8 @@ class ServerDataSourceImpl implements ServerDataSource {
         certificate: request.certificate,
         tlsPrefix: request.tlsPrefix,
         customSni: request.customSni,
+        httpConnectionsNum: request.httpConnectionsNum,
+        antiDpi: request.antiDpi,
       ),
     );
   }
@@ -133,6 +137,8 @@ class ServerDataSourceImpl implements ServerDataSource {
             ipv6: e.ipv6Enabled,
             selected: e.selected,
             customSni: e.customSni,
+            httpConnectionsNum: e.httpConnectionsNum,
+            antiDpi: e.antiDpi,
           ),
         );
       },
@@ -194,6 +200,8 @@ class ServerDataSourceImpl implements ServerDataSource {
         ipv6Enabled: Value(request.ipv6),
         tlsPrefix: Value(request.tlsPrefix),
         customSni: Value(request.customSni),
+        httpConnectionsNum: Value(request.httpConnectionsNum),
+        antiDpi: Value(request.antiDpi),
       ),
     );
 
@@ -245,6 +253,8 @@ class ServerDataSourceImpl implements ServerDataSource {
         tlsPrefix: server.tlsPrefix,
         certificate: cert == null ? null : _parseCert(cert),
         customSni: server.customSni,
+        httpConnectionsNum: server.httpConnectionsNum,
+        antiDpi: server.antiDpi,
       ),
     );
   }
@@ -267,7 +277,9 @@ class ServerDataSourceImpl implements ServerDataSource {
       vpnProtocol: configuration.endpoint.upStreamProtocol == UpStreamProtocol.http2
           ? VpnProtocol.http2
           : VpnProtocol.quic,
-      dnsServers: configuration.endpoint.dnsUpStreams,
+      dnsServers: configuration.endpoint.dnsUpStreams.isEmpty
+          ? ServerData.defaultDnsServers
+          : configuration.endpoint.dnsUpStreams,
       routingProfileId: routingProfileId,
       ipv6: configuration.endpoint.hasIpv6,
       tlsPrefix: configuration.endpoint.clientRandom,
@@ -278,6 +290,10 @@ class ServerDataSourceImpl implements ServerDataSource {
               data: configuration.endpoint.certificate,
             ),
       customSni: configuration.endpoint.customSni,
+      httpConnectionsNum: configuration.endpoint.httpConnectionsNum <= 0
+          ? ServerData.defaultHttpConnectionsNum
+          : configuration.endpoint.httpConnectionsNum.clamp(0, 8),
+      antiDpi: configuration.endpoint.antiDpi,
     );
   }
 

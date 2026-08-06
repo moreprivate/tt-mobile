@@ -116,10 +116,14 @@ class VpnDataSourceImpl implements VpnDataSource {
         server.ipAddress,
       ],
       exclusions: exclusions,
-      dnsUpStreams: server.dnsServers,
+      dnsUpStreams: server.dnsServers.isEmpty ? ServerData.defaultDnsServers : server.dnsServers,
       upStreamProtocol: UpStreamProtocolEncoder().convert(
         server.vpnProtocol,
       ),
+      antiDpi: server.antiDpi,
+      httpConnectionsNum: server.httpConnectionsNum <= 0
+          ? ServerData.defaultHttpConnectionsNum
+          : server.httpConnectionsNum.clamp(0, 8),
     );
 
     Future<void> command() => _platformApi.start(
@@ -190,13 +194,17 @@ class VpnDataSourceImpl implements VpnDataSource {
         server.ipAddress,
       ],
       exclusions: exclusions,
-      dnsUpStreams: server.dnsServers,
+      dnsUpStreams: server.dnsServers.isEmpty ? ServerData.defaultDnsServers : server.dnsServers,
       upStreamProtocol: UpStreamProtocolEncoder().convert(
         server.vpnProtocol,
       ),
       customSni: server.customSni ?? '',
       certificate: server.certificate?.data ?? '',
       clientRandom: server.tlsPrefix ?? '',
+      antiDpi: server.antiDpi,
+      httpConnectionsNum: server.httpConnectionsNum <= 0
+          ? ServerData.defaultHttpConnectionsNum
+          : server.httpConnectionsNum.clamp(0, 8),
     );
 
     Future<void> command() => _platformApi.updateConfiguration(

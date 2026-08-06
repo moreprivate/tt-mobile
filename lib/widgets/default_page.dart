@@ -7,6 +7,7 @@ class DefaultPage extends StatelessWidget {
   final String? descriptionText;
   final String? buttonText;
   final VoidCallback? onButtonPressed;
+  final Widget? button;
   final String imagePath;
   final Size imageSize;
 
@@ -21,6 +22,7 @@ class DefaultPage extends StatelessWidget {
     this.descriptionText,
     this.buttonText,
     this.onButtonPressed,
+    this.button,
   }) : _desktopImageSize = null,
        _desktopImagePath = null;
 
@@ -33,6 +35,7 @@ class DefaultPage extends StatelessWidget {
     this.descriptionText,
     this.buttonText,
     this.onButtonPressed,
+    this.button,
     String? desktopImagePath,
   }) : _desktopImagePath = desktopImagePath ?? imagePath,
        _desktopImageSize = desktopImageSize;
@@ -91,7 +94,9 @@ class DefaultPage extends StatelessWidget {
                       style: context.textTheme.bodyMedium,
                     ),
                   ),
-                if (buttonText != null)
+                if (button != null)
+                  button!
+                else if (buttonText != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: FilledButton(

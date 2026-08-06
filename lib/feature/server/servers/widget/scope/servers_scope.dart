@@ -4,6 +4,7 @@ import 'package:trusttunnel/common/controller/widget/state_consumer.dart';
 import 'package:trusttunnel/common/error/model/presentation_exception.dart';
 import 'package:trusttunnel/common/extensions/context_extensions.dart';
 import 'package:trusttunnel/data/model/server.dart';
+import 'package:trusttunnel/data/model/server_data.dart';
 import 'package:trusttunnel/feature/server/servers/controller/servers_controller.dart';
 import 'package:trusttunnel/feature/server/servers/controller/servers_states.dart';
 import 'package:trusttunnel/feature/server/servers/widget/scope/servers_scope_aspect.dart';
@@ -61,6 +62,7 @@ class _ServersScopeState extends State<ServersScope> {
       state: state,
       pickServer: _selectServer,
       fetchServers: _controller.fetchServers,
+      importConfigFile: _controller.importConfigFile,
       child: widget.child,
     ),
   );
@@ -87,10 +89,14 @@ class _InheritedServersScope extends InheritedModel<ServersScopeAspect> implemen
   @override
   final void Function() fetchServers;
 
+  @override
+  final Future<ServerData?> Function() importConfigFile;
+
   const _InheritedServersScope({
     required ServersState state,
     required this.pickServer,
     required this.fetchServers,
+    required this.importConfigFile,
     required super.child,
   }) : _state = state;
 

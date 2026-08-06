@@ -107,19 +107,14 @@ flutter run -d emulator-5554
 
 ## Configure a server
 
-Create a client configuration on the server, then enter these values through
-**Servers → Create**:
+**Preferred:** export a client config on the server (`trusttunnel_endpoint -c` or
+`tt-server.sh add-user`), copy the `.toml` to the phone, then **Import config**
+(empty list) or **Add server → Import config**. The form is filled from the file;
+**Routing profile** stays an app setting (not in the server TOML).
 
-- display name
-- endpoint address and port
-- endpoint hostname/SNI
-- username and password
-- DNS servers
-- transport protocol (`http2` → HTTP/2, `http3` → QUIC)
-- certificate or system certificate verification
-
-The server exports the required values. Keep certificate verification enabled;
-do not use an insecure skip-verification setting for normal operation.
+**Manual create** is still available. Form fields map to server endpoint keys
+(name, address, domain, SNI, credentials, protocol, parallel connections,
+DNS, client random, PEM, IPv6) plus routing profile.
 
 ## Verify a connection
 

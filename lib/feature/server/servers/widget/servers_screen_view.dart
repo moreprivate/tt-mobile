@@ -85,7 +85,7 @@ class _ServersScreenViewState extends State<ServersScreenView> {
             : Builder(
                 builder: (context) => CustomFloatingActionButton.extended(
                   icon: AssetIcons.add,
-                  onPressed: () => _pushServerDetailsScreen(context),
+                  onPressed: () => _showAddServerActions(context),
                   label: context.ln.addServer,
                 ),
               ),
@@ -93,7 +93,56 @@ class _ServersScreenViewState extends State<ServersScreenView> {
     ),
   );
 
-  void _pushServerDetailsScreen(
+  Future<void> _showAddServerActions(BuildContext context) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.file_upload_outlined),
+              title: Text(context.ln.importConfig),
+              subtitle: Text(context.ln.importConfigDescription),
+              onTap: () => Navigator.of(sheetContext).pop('import'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: Text(context.ln.create),
+              onTap: () => Navigator.of(sheetContext).pop('create'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!context.mounted || choice == null) {
+      return;
+    }
+    if (choice == 'import') {
+      await _importConfig(context);
+    } else {
+      await _pushServerDetailsScreen(context);
+    }
+  }
+
+  Future<void> _importConfig(BuildContext context) async {
+    final controller = ServersScope.controllerOf(context, listen: false);
+    try {
+      final data = await controller.importConfigFile();
+      if (data == null || !context.mounted) {
+        return;
+      }
+      await _pushServerDetailsScreen(context, preloadedData: data);
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      context.showInfoSnackBar(message: context.ln.importConfigFailed);
+    }
+  }
+
+  Future<void> _pushServerDetailsScreen(
     BuildContext context, {
     ServerData? preloadedData,
   }) async {
