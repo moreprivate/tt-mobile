@@ -52,13 +52,13 @@ class ServerData {
 
   final String? customSni;
 
-  /// Parallel H2/H3 sessions (`0` = library default, or `1`–`8`). Default [defaultHttpConnectionsNum].
+  /// Parallel H2/H3 sessions (`0` = library default of 8, or `1`–`8`). Default [defaultHttpConnectionsNum].
   final int httpConnectionsNum;
 
   /// TLS anti-DPI pacing (config `anti_dpi`). Default false for throughput.
   final bool antiDpi;
 
-  /// Product default: `0` lets the native client apply its library default.
+  /// Product default: `0` → native library default (**8** parallel sessions).
   static const int defaultHttpConnectionsNum = 0;
 
   /// Default DNS when config list is empty (Cloudflare).
