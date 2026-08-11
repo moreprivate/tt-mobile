@@ -34,7 +34,7 @@ jobs:
     runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.build_runner == 'self-hosted' && 'docker-runner' || 'ubuntu-24.04' }}
     timeout-minutes: 120
     container:
-      image: adguard/core-libs:2.12
+      image: adguard/core-libs@sha256:26f7e1c6c19b1e2c90a8938e6c763469787fbaeff94f8c5a887b947aa8858f5e
     defaults:
       run:
         shell: bash
@@ -78,24 +78,28 @@ jobs:
           mobile_stamp="$(git show -s --format=%ct HEAD)"
           mobile_ts="$(date -u --date="@${mobile_stamp}" +%Y%m%dT%H%M%SZ)"
           mobile_short_sha="$(git rev-parse --short=12 HEAD)"
+          # Android versionCode must be stable for the same source commit;
+          # github.run_number would change the APK on every rerun.  A commit
+          # timestamp keeps versions increasing for normal chronological
+          # releases while remaining below Android's 2,100,000,000 limit.
+          mobile_version_code="$(( mobile_stamp - 1577836800 ))"
+          if (( mobile_version_code <= 0 || mobile_version_code > 2100000000 )); then
+            echo "Commit timestamp cannot produce a valid Android versionCode" >&2
+            exit 1
+          fi
           release_tag="${mobile_ts}-${mobile_short_sha}"
           # Primary installable artifact: arm64 phones (≈10–20× smaller than fat debug).
           apk_name="tt-mobile-${release_tag}-arm64-v8a-release.apk"
           echo "version=${release_tag}" >> "$GITHUB_OUTPUT"
           echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
           echo "apk_name=${apk_name}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${mobile_version_code}" >> "$GITHUB_OUTPUT"
+          echo "SOURCE_DATE_EPOCH=${mobile_stamp}" >> "$GITHUB_ENV"
           echo "Mobile release: ${release_tag}"
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
 
       - name: Install native build tools
         run: |
           set -euo pipefail
-          command -v python3
           SDKMANAGER="$(command -v sdkmanager || true)"
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           if [[ -z "${SDKMANAGER}" ]]; then
@@ -127,31 +131,19 @@ jobs:
           echo "ANDROID_HOME=${SDK_ROOT}" >> "${GITHUB_ENV}"
           echo "ANDROID_SDK_ROOT=${SDK_ROOT}" >> "${GITHUB_ENV}"
           echo "SDKMANAGER=${SDKMANAGER}" >> "${GITHUB_ENV}"
-          if ! command -v rustup >/dev/null 2>&1; then
-            curl --fail --silent --show-error https://sh.rustup.rs \
-              | sh -s -- -y --profile minimal
-          fi
-          test -f "$HOME/.cargo/env" && . "$HOME/.cargo/env" || true
-          python3 -m venv .venv
-          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
-          . .venv/bin/activate
-          python -m pip install --upgrade pip conan
-          rustup toolchain install stable --profile minimal
-          rustup default stable
-          rustup target add aarch64-linux-android armv7-linux-androideabi \
-            x86_64-linux-android i686-linux-android
-          cargo install --locked cargo-ndk
-
           FLUTTER_HOME="${RUNNER_TEMP}/flutter"
+          FLUTTER_REF=058e0af2c2b57e369d905a03ac9748b0ebf543c6
           if [[ -d "${FLUTTER_HOME}/.git" ]]; then
-            git -C "${FLUTTER_HOME}" fetch --depth 1 origin \
-              refs/tags/3.44.8
+            git -C "${FLUTTER_HOME}" fetch --depth 1 origin "${FLUTTER_REF}"
             git -C "${FLUTTER_HOME}" checkout --force FETCH_HEAD
           else
             rm -rf "${FLUTTER_HOME}"
-            git clone --depth 1 --branch 3.44.8 \
+            git clone --filter=blob:none --no-checkout \
               https://github.com/flutter/flutter.git "${FLUTTER_HOME}"
+            git -C "${FLUTTER_HOME}" fetch --depth 1 origin "${FLUTTER_REF}"
+            git -C "${FLUTTER_HOME}" checkout --force FETCH_HEAD
           fi
+          test "$(git -C "${FLUTTER_HOME}" rev-parse HEAD)" = "${FLUTTER_REF}"
           echo "${FLUTTER_HOME}/bin" >> "${GITHUB_PATH}"
           "${FLUTTER_HOME}/bin/flutter" config --no-analytics
 
@@ -165,7 +157,6 @@ jobs:
       - name: Validate Flutter project
         run: |
           set -euo pipefail
-          . .venv/bin/activate
           make init
 
           flutter analyze --no-fatal-infos
@@ -206,11 +197,10 @@ jobs:
         run: |
           set -euo pipefail
           # Release + split-per-abi; signed via ORG_GRADLE_PROJECT_signingConfigKey* above.
-          flutter build apk --release --split-per-abi \
-            --build-name="${{ steps.version.outputs.version }}" \
-            --build-number="${{ github.run_number }}" \
-            --dart-define="TT_CLIENT_VERSION=${{ steps.version.outputs.client_release }}" \
-            --no-pub
+          make release-apk \
+            PROJECT_VERSION="${{ steps.version.outputs.version }}" \
+            BUILD_NUMBER="${{ steps.version.outputs.version_code }}" \
+            TT_CLIENT_VERSION="${{ steps.version.outputs.client_release }}"
           out=build/app/outputs/flutter-apk
           tag="${{ steps.version.outputs.release_tag }}"
           for abi in arm64-v8a armeabi-v7a x86_64; do
