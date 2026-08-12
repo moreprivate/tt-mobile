@@ -1,133 +1,99 @@
-# TrustTunnel mobile client
+# TrustTunnel mobile
 
-Flutter mobile client for the self-hosted TrustTunnel service.
+`tt-mobile` is the Flutter Android application for a self-hosted
+[tt-server](https://github.com/moreprivate/tt-server). It uses the native
+Android client library built by
+[tt-client](https://github.com/moreprivate/tt-client).
 
 Repositories:
 
 - Server: <https://github.com/moreprivate/tt-server>
-- Console client: <https://github.com/moreprivate/tt-client>
-- This app: <https://github.com/moreprivate/tt-mobile>
+- Native/console client: <https://github.com/moreprivate/tt-client>
+- This application: <https://github.com/moreprivate/tt-mobile>
 
-## Current scope
+## Current functionality
 
-Android is the supported development target. The Android app builds the
-native client from the separately maintained `moreprivate/tt-client` checkout
-at build time. The mobile repository does not vendor or publish a second copy
-of the client source.
-
-The app currently provides server management, routing profiles, and VPN
-connect/disconnect/reconnect. TOML import is not implemented; server values
-must be entered in the app.
-
-Apple targets still use the existing prebuilt framework package and therefore
-remain separate work.
-
-## Prerequisites
-
-- Flutter stable (3.44 or newer)
-- Dart SDK supplied by Flutter
-- Android SDK with API 36
-- Android NDK `29.0.14206865`
-- CMake `3.31.6`
-- The versioned `tt-client` Android Maven artifact selected by the build
+The Android app can create and edit server profiles, import a server TOML,
+manage routing profiles, and connect, disconnect, or reconnect the Android VPN.
+Routing profiles are app settings and are not written into server TOML. The
+Android application ID is `com.moreprivate.tt_mobile`.
 
 ## Android development
 
-```bash
+The reproducible build uses Flutter 3.44.8, Android API 36, NDK
+29.0.14206865, CMake 3.31.6, and Java 21:
+
+```sh
 git clone https://github.com/moreprivate/tt-mobile.git
 cd tt-mobile
-
 flutter pub get
 make gen
 make ln
 flutter run -d <android-device>
 ```
 
-The build consumes a versioned `tt-client` Android Maven repository under
-`third_party/tt-client-maven`. CI downloads and verifies that archive from the
-`moreprivate/tt-client` release selected by `client_release`; no upstream
-GitHub Maven repository or token is used.
+The app consumes a versioned Android Maven archive from a `tt-client`
+release. CI downloads and verifies that archive using the exact
+`client_release` input; it does not depend on a checkout outside this
+repository or an upstream GitHub Maven repository.
 
-### Release APK (local or CI) — signed, replaceable
+## Release APKs
 
-Release builds **require** a fixed signing keystore so every APK (laptop Docker
-chain, GitHub cloud, self-hosted runner) can **replace** the previous install.
+The supported installable output is a signed release APK split by ABI:
 
-**One-time local keystore in HOME** (not in the repo; survives deleting the clone):
-
-```bash
-cd tt-mobile
+```sh
 make aux-setup-android-signing
-# → $HOME/.config/tt-mobile/trusttunnel.keystore
-# → android/local.properties (absolute path + passwords; gitignored)
-# Back up ~/.config/tt-mobile/ and the password offline.
-```
-
-**Same key into GitHub** (repo or org secrets for cloud + self-hosted):
-
-| Secret | Value |
-|---|---|
-| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 ~/.config/tt-mobile/trusttunnel.keystore` |
-| `ANDROID_KEYSTORE_PASSWORD` | store password |
-| `ANDROID_KEY_ALIAS` | `trusttunnel` (default from setup) |
-| `ANDROID_KEY_PASSWORD` | key password |
-
-Prefer **release + split per ABI**:
-
-```bash
-# after third_party/tt-client-maven is populated and ttClientVersion is set
 make release-apk
-# → build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
 ```
 
-From the sibling chain (`tt-manage`):
+The keystore is stored at
+`$HOME/.config/tt-mobile/trusttunnel.keystore` and is never committed. CI
+uses the same key through `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and
+`ANDROID_KEY_PASSWORD`; without signing configuration it refuses to publish
+installable APKs.
 
-```bash
-make clean && make build
-# → ../.tt-build/tt-mobile-arm64-v8a-release.apk  (signed)
+Use `app-arm64-v8a-release.apk` for modern phones.
+`make release-apk-fat` is available for a larger all-ABI APK. Debug APKs are
+for development only and use a different key, so they cannot replace a
+release APK on a device.
+
+The reproducible workflow is
+`.github/workflows/build-mobile-targets.yml`. It downloads the exact client
+release, builds arm64-v8a, armeabi-v7a, and x86_64 APKs, and publishes
+checksums through the `tt-manage` release chain.
+
+## Import a server profile
+
+On the server:
+
+```sh
+bash tt-server.sh add-user phone
 ```
 
-Without signing config, the release Gradle task **fails** (no silent unsigned/debug-signed APKs).
-
-**Why old APKs were ~200MB:** debug mode (large `libflutter`, Vulkan validation
-layer, uncompressed Dart assets) × three ABIs in one fat APK. Release arm64 is
-roughly **10× smaller**.
-
-Optional fat single APK (all ABIs, ~90MB): `make release-apk-fat`.
-
-For an emulator:
-
-```bash
-emulator -avd <avd-name> &
-adb wait-for-device
-flutter devices
-flutter run -d emulator-5554
-# or install the x86_64 split: adb install app-x86_64-release.apk
-```
-
-## Configure a server
-
-**Preferred:** export a client config on the server (`trusttunnel_endpoint -c` or
-`tt-server.sh add-user`), copy the `.toml` to the phone, then **Import config**
-(empty list) or **Add server → Import config**. The form is filled from the file;
-**Routing profile** stays an app setting (not in the server TOML).
-
-**Manual create** is still available. Form fields map to server endpoint keys
-(name, address, domain, SNI, credentials, protocol, parallel connections,
-DNS, client random, PEM, IPv6) plus routing profile.
+Copy the resulting `phone.toml` to the phone and choose **Import config** in
+the app. Manual profile creation remains available.
 
 ## Verify a connection
 
-Tap **Connect**, approve the Android VPN permission, and verify the app reports
-`connected`. Test **Disconnect** and **Reconnect** as well.
+Tap **Connect**, approve Android VPN permission, and confirm the app reports
+`connected`. Exercise **Disconnect** and **Reconnect** as well. On the VPS:
 
-On the server, observe the endpoint session:
-
-```bash
+```sh
 ss -tn state established '( sport = :443 )'
 ```
 
-## Selecting the native client
+## Related local build
 
-CI uses the newest `moreprivate/tt-client` release by default. A manual build
-can select an exact client release tag with the `client_release` workflow input.
+To build server, native client, and mobile with the same pinned toolchain used
+by CI:
+
+```sh
+cd ../tt-manage
+make check
+make build
+```
+
+## License
+
+Apache 2.0. See [LICENSE](LICENSE).
