@@ -57,23 +57,23 @@ lib/common/localization/generated/l10n.dart: .dart_tool/package_config.json lib/
 # Keystore lives in HOME (not the repo): ~/.config/tt-mobile/
 # Survives git clone/delete; never committed. Back it up yourself.
 TT_MOBILE_SIGN_DIR ?= $(HOME)/.config/tt-mobile
-TT_MOBILE_KEYSTORE ?= $(TT_MOBILE_SIGN_DIR)/trusttunnel.keystore
+TT_MOBILE_KEYSTORE ?= $(TT_MOBILE_SIGN_DIR)/tt-mobile.keystore
 
 # Interactive; must use bash (dash has no `read -s`). Requires a real password.
 aux-setup-android-signing:
 	@bash -euo pipefail -c '\
 	  echo "Enter password for Android keystore (store + key)."; \
-	  echo "Written only under $$HOME and android/local.properties (not git)."; \
+	  echo "Written only under $$HOME/.config/tt-mobile (not git)."; \
 	  read -r -s -p "Password: " PASSWORD; echo; \
 	  if [ -z "$$PASSWORD" ]; then echo "ERROR: password must not be empty." >&2; exit 1; fi; \
 	  read -r -s -p "Confirm:  " PASSWORD2; echo; \
 	  if [ "$$PASSWORD" != "$$PASSWORD2" ]; then echo "ERROR: passwords do not match." >&2; exit 1; fi; \
 	  mkdir -p "$(TT_MOBILE_SIGN_DIR)"; \
-	  echo "* Generating $(TT_MOBILE_KEYSTORE) (alias: trusttunnel) *"; \
-	  rm -f "$(TT_MOBILE_KEYSTORE)"; \
+	  echo "* Generating $(TT_MOBILE_KEYSTORE) (alias: tt-mobile) *"; \
+	  if [ -e "$(TT_MOBILE_KEYSTORE)" ]; then echo "ERROR: $(TT_MOBILE_KEYSTORE) already exists; refusing to overwrite it." >&2; exit 1; fi; \
 	  keytool -genkeypair -v \
 	    -keystore "$(TT_MOBILE_KEYSTORE)" \
-	    -alias trusttunnel \
+	    -alias tt-mobile \
 	    -keyalg RSA \
 	    -keysize 2048 \
 	    -validity 10500 \
@@ -82,19 +82,18 @@ aux-setup-android-signing:
 	    -keypass "$$PASSWORD" \
 	    -dname "CN=tt-mobile, OU=moreprivate, O=moreprivate, L=Unknown, ST=Unknown, C=US"; \
 	  chmod 600 "$(TT_MOBILE_KEYSTORE)"; \
-	  echo "* Updating android/local.properties *"; \
-	  mkdir -p android; \
-	  touch android/local.properties; \
-	  grep -vE "^[[:space:]]*signingConfigKey(Alias|Password|StorePath|StorePassword)[[:space:]]*=" android/local.properties \
-	    > android/local.properties.tmp || true; \
-	  mv android/local.properties.tmp android/local.properties; \
+	  echo "* Updating $(TT_MOBILE_SIGN_DIR)/local.properties *"; \
+	  touch "$(TT_MOBILE_SIGN_DIR)/local.properties"; \
+	  grep -vE "^[[:space:]]*signingConfigKey(Alias|Password|StorePath|StorePassword)[[:space:]]*=" "$(TT_MOBILE_SIGN_DIR)/local.properties" \
+	    > "$(TT_MOBILE_SIGN_DIR)/local.properties.tmp" || true; \
+	  mv "$(TT_MOBILE_SIGN_DIR)/local.properties.tmp" "$(TT_MOBILE_SIGN_DIR)/local.properties"; \
 	  printf "%s\n" \
-	    "signingConfigKeyAlias=trusttunnel" \
+	    "signingConfigKeyAlias=tt-mobile" \
 	    "signingConfigKeyPassword=$$PASSWORD" \
 	    "signingConfigKeyStorePath=$(TT_MOBILE_KEYSTORE)" \
 	    "signingConfigKeyStorePassword=$$PASSWORD" \
-	    >> android/local.properties; \
-	  chmod 600 android/local.properties; \
+	    >> "$(TT_MOBILE_SIGN_DIR)/local.properties"; \
+	  chmod 600 "$(TT_MOBILE_SIGN_DIR)/local.properties"; \
 	  echo "* Done. Keystore: $(TT_MOBILE_KEYSTORE)"; \
 	  echo "* Back this file + password up offline. Not in git."; \
 	  echo "* CI: base64 -w0 $(TT_MOBILE_KEYSTORE) → secret ANDROID_KEYSTORE_BASE64" \
