@@ -47,7 +47,6 @@ app.*.map.json
 .gradle/
 third_party/tt-client-maven/
 android/app/.cxx
-android/trusttunnel.keystore
 android/build
 
 # Android Studio will place build artifacts here

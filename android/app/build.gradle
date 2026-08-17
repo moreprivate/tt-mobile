@@ -21,6 +21,17 @@ if (localPropertiesFile.exists()) {
     }
 }
 
+// Signing secrets live outside the checkout, under the user's MorePrivate
+// configuration directory. The repo-local file is reserved for SDK/Flutter
+// metadata and is never a signing source.
+def signingProperties = new Properties()
+def signingPropertiesFile = new File(System.getProperty("user.home"), ".config/moreprivate/tt-mobile/local.properties")
+if (signingPropertiesFile.exists()) {
+    signingPropertiesFile.withReader("UTF-8") { reader ->
+        signingProperties.load(reader)
+    }
+}
+
 def flutterVersionCode = localProperties.getProperty("flutter.versionCode")
 if (flutterVersionCode == null) {
     flutterVersionCode = "1"
@@ -35,7 +46,7 @@ if (flutterVersionName == null) {
 def getSigningProp = { String name ->
     def v = project.findProperty(name)
     if (v != null) return v.toString()
-    v = localProperties.getProperty(name)
+    v = signingProperties.getProperty(name)
     return v != null ? v.toString() : null
 }
 
@@ -73,8 +84,8 @@ android {
     }
 
     // Release APKs must be signed with a fixed keystore so local and CI builds
-    // replace each other on device. Set via android/local.properties or
-    // ORG_GRADLE_PROJECT_signingConfigKey* (CI).
+    // replace each other on device. Set via the external MorePrivate signing
+    // properties or ORG_GRADLE_PROJECT_signingConfigKey* (CI).
     def signingStorePath = getSigningProp("signingConfigKeyStorePath")
     def signingAlias = getSigningProp("signingConfigKeyAlias")
     def signingKeyPassword = getSigningProp("signingConfigKeyPassword")
@@ -101,7 +112,7 @@ android {
                 throw new GradleException(
                     "Release signing is required for replaceable APKs.\n" +
                     "Local:  cd tt-mobile && make aux-setup-android-signing\n" +
-                    "        (keystore in \$HOME/.config/tt-mobile/, not the repo)\n" +
+                    "        (keystore in \$HOME/.config/moreprivate/tt-mobile/, not the repo)\n" +
                     "CI:     secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,\n" +
                     "        ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD\n" +
                     "Or ORG_GRADLE_PROJECT_signingConfigKeyStorePath/Alias/Password/StorePassword."

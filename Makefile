@@ -54,16 +54,16 @@ lib/common/localization/generated/l10n.dart: .dart_tool/package_config.json lib/
 	@$(MAKE) -C plugins/vpn_plugin gen
 	@echo "* Code generation successful *"
 
-# Keystore lives in HOME (not the repo): ~/.config/tt-mobile/
+# Keystore lives in HOME (not the repo): ~/.config/moreprivate/tt-mobile/
 # Survives git clone/delete; never committed. Back it up yourself.
-TT_MOBILE_SIGN_DIR ?= $(HOME)/.config/tt-mobile
+TT_MOBILE_SIGN_DIR ?= $(HOME)/.config/moreprivate/tt-mobile
 TT_MOBILE_KEYSTORE ?= $(TT_MOBILE_SIGN_DIR)/tt-mobile.keystore
 
 # Interactive; must use bash (dash has no `read -s`). Requires a real password.
 aux-setup-android-signing:
 	@bash -euo pipefail -c '\
 	  echo "Enter password for Android keystore (store + key)."; \
-	  echo "Written only under $$HOME/.config/tt-mobile (not git)."; \
+	  echo "Written only under $$HOME/.config/moreprivate/tt-mobile (not git)."; \
 	  read -r -s -p "Password: " PASSWORD; echo; \
 	  if [ -z "$$PASSWORD" ]; then echo "ERROR: password must not be empty." >&2; exit 1; fi; \
 	  read -r -s -p "Confirm:  " PASSWORD2; echo; \

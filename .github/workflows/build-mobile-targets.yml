@@ -180,7 +180,7 @@ jobs:
             echo "Missing Android signing secrets (required for replaceable release APKs):" >&2
             echo "  ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD" >&2
             echo "Create once locally: make aux-setup-android-signing" >&2
-            echo "Then: base64 -w0 $HOME/.config/tt-mobile/tt-mobile.keystore  →  ANDROID_KEYSTORE_BASE64" >&2
+            echo "Then: base64 -w0 $HOME/.config/moreprivate/tt-mobile/tt-mobile.keystore  →  ANDROID_KEYSTORE_BASE64" >&2
             exit 1
           fi
           ks="${RUNNER_TEMP}/tt-mobile-release.keystore"
