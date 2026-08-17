@@ -1,6 +1,6 @@
-# TrustTunnel mobile
+# MorePrivate tt-mobile
 
-`tt-mobile` is the Flutter Android application for a self-hosted
+[tt-mobile](https://github.com/moreprivate/tt-mobile) is the Flutter Android application for a self-hosted
 [tt-server](https://github.com/moreprivate/tt-server). It uses the native
 Android client library built by
 [tt-client](https://github.com/moreprivate/tt-client).
@@ -47,7 +47,7 @@ make release-apk
 ```
 
 The keystore is stored at
-`$HOME/.config/tt-mobile/trusttunnel.keystore` and is never committed. CI
+`$HOME/.config/moreprivate/tt-mobile/tt-mobile.keystore` and is never committed. CI
 uses the same key through `ANDROID_KEYSTORE_BASE64`,
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and
 `ANDROID_KEY_PASSWORD`; without signing configuration it refuses to publish
