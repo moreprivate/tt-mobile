@@ -2,7 +2,7 @@
 
 init:
 	@echo "* Getting latest dependencies *"
-	@flutter pub get
+	@flutter pub get --enforce-lockfile
 	@echo "* Running build runner *"
 	@$(MAKE) gen
 

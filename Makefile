@@ -21,7 +21,7 @@ init:
 	@echo "* Running flutter clean *"
 	@flutter clean
 	@echo "* Getting latest dependencies *"
-	@flutter pub get
+	@flutter pub get --enforce-lockfile
 	@echo "* Running build runner *"
 	@dart run build_runner build
 	@dart pub run intl_utils:generate
@@ -29,7 +29,7 @@ init:
 
 .dart_tool/package_config.json: pubspec.yaml pubspec.lock
 	@echo "* Resolving dependencies... *"
-	@flutter pub get 2>&1 | \
+	@flutter pub get --enforce-lockfile 2>&1 | \
 		grep -v 'untranslated message' | \
 		grep -v 'To see a detailed report' | \
 		grep -v 'untranslated-messages-file' | \

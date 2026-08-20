@@ -55,6 +55,13 @@ android {
     compileSdk = 36
     ndkVersion = "29.0.14206865"
 
+    // AGP's encrypted dependency-info block changes on every build. Disable
+    // it so release APK signatures remain byte-reproducible.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

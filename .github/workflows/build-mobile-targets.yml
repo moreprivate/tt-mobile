@@ -40,6 +40,9 @@ jobs:
         shell: bash
     env:
       TT_CLIENT_REPOSITORY: moreprivate/tt-client
+      TZ: UTC
+      LC_ALL: C
+      LANG: C
     steps:
       - name: Check out mobile source
         uses: actions/checkout@v6
